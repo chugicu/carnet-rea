@@ -1,7 +1,8 @@
 // Administration (équipe pédagogique) : réglages modifiables sans code
 import { h, icon, clear, clone, slugify, ICON_NAMES, fmtDateFull, download, toCSV, dayKey } from '../util.js';
-import { S, cfg, saveCfg, put, adminCall, users, interns, fullName, userById } from '../store.js';
-import { gesteDefs, ENTRETIENS } from '../logic.js';
+import { S, cfg, saveCfg, put, adminCall, users, interns, fullName, userById, gestesRaw } from '../store.js';
+import { soutienAdmin } from './soutien.js';
+import { gesteDefs, ENTRETIENS, parcoursCfg, profilDJ } from '../logic.js';
 import { openSheet, toast, field, textInput, textArea, selectInput, checkbox, choices, listEditor, colorInput, confirmSheet, empty, sectionHead } from '../ui.js';
 import { DEFAULTS } from '../defaults.js';
 import { adminShell, rowItem, moveBtns, uniqueId, numInput, checkList, iconPicker } from './admin-ui.js';
@@ -13,10 +14,11 @@ import { badgesAdmin, defisAdmin } from './admin-rules.js';
 const SECTIONS = [
   ['app', 'sliders', 'Application', 'Nom, logo, textes'],
   ['modules', 'grid', 'Modules', 'Activer ou masquer des fonctions'],
-  ['gestes', 'activity', 'Gestes', 'Catalogue, sites, règle d’autonomie'],
+  ['gestes', 'activity', 'Gestes', 'Catalogue, sites, autonomie, parcours débutants'],
   ['specialites', 'stethoscope', 'DES d’origine', 'Liste proposée aux internes'],
   ['radar', 'radar', 'Radar et notation', 'Axes et échelle A–E'],
   ['meteo', 'cloud-sun', 'Météo', 'Niveaux et mention'],
+  ['soutien', 'heart', 'Ressources de soutien', 'Écran affiché après une météo d’alerte'],
   ['badges', 'award', 'Badges', 'Règles de déblocage'],
   ['defis', 'flag', 'Défis de promo', 'Objectifs collectifs'],
   ['semestres', 'calendar', 'Semestres', 'Nouveau semestre, dates'],
@@ -134,7 +136,7 @@ function openGesteEditor(def) {
       h('p', { class: 'tiny muted' }, 'Renommer un site ou une modalité ne modifie pas les gestes déjà saisis.')),
     actions: [{ label: 'Enregistrer', kind: 'primary', onClick: () => {
       if (!nom.value.trim()) { toast('Le nom est obligatoire.', { err: true }); return false; }
-      const all = clone(cfg('gestes'));
+      const all = clone(gestesRaw());
       const out = { id: d.id, nom: nom.value.trim(), nomLong: nomLong.value.trim(), couleur: col.value, actif: actif.input.checked };
       if (libre.input.checked) out.libre = true;
       if (sites.length) out.sites = sites; if (modal.length) out.modalites = modal;
@@ -146,11 +148,66 @@ function openGesteEditor(def) {
     } }]
   });
 }
+/** Parcours des internes débutants : questions à l'inscription et tuiles « Premiers KTC / KTA » */
+function parcoursBlock() {
+  const pc = parcoursCfg();
+  const actif = checkbox('Parcours débutant actif (question à l’inscription, tuiles « Premiers KTC » et « Premiers KTA »)', pc.actif !== false);
+  const avant = numInput(pc.seuilAvant, 0, 99), q = numInput(pc.quatreMains, 1, 99), s = numInput(pc.supervises, 1, 99), c = numInput(pc.comptes, 1, 99);
+  return h('div', { class: 'card col' }, h('div', { class: 'h2' }, 'Parcours des débutants (KTC et KTA)'),
+    h('p', { class: 'small muted' }, 'À l’inscription, l’interne indique combien de KTC et de KTA il a déjà posés. S’il en a posé peu, la tuile KTC (ou KTA) est remplacée par « Premiers KTC » (ou « Premiers KTA »), saisie à 4 mains puis supervisée, avec site et réussite ou échec.'),
+    actif,
+    field('Parcours Premiers si le nombre de KT posés avant le stage est inférieur ou égal à', avant),
+    field('Réussis à 4 mains pour débloquer « Supervisé »', q),
+    field('Supervisés réussis pour passer à la tuile KTC / KTA', s),
+    field('Premiers réussis comptés dans le total KTC / KTA', c, 'Seuls les réussis comptent, les échecs restent dans l’historique.'),
+    h('button', { class: 'btn primary block', onclick: () => {
+      const v = { actif: actif.input.checked, seuilAvant: Math.max(0, Math.min(99, Math.round(Number(avant.value)))), quatreMains: Math.max(1, Math.min(99, Math.round(Number(q.value)))), supervises: Math.max(1, Math.min(99, Math.round(Number(s.value)))), comptes: Math.max(1, Math.min(99, Math.round(Number(c.value)))) };
+      if ([v.seuilAvant, v.quatreMains, v.supervises, v.comptes].some(x => !Number.isFinite(x))) { toast('Renseigne des nombres.', { err: true }); return; }
+      saveCfg('parcours', v); toast('Parcours enregistré.');
+    } }, 'Enregistrer le parcours'),
+    h('p', { class: 'tiny muted' }, 'Les internes déjà inscrits sont concernés selon le nombre saisi dans leur compte (Admin → Comptes). Désactiver le parcours rend à tous les tuiles KTC et KTA habituelles.'));
+}
+/** Profil DJ : mêmes tuiles que les internes au départ, réglables ici (masquer, renommer, seuil, sites, modalités) */
+function djBlock() {
+  const p = profilDJ();
+  const actif = checkbox('Réglages DJ actifs (décocher : les DJ voient les mêmes tuiles que les internes)', p.actif !== false);
+  const split = v => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
+  const rows = gesteDefs(true).filter(g => g.id !== 'echo').map(g => {
+    const l = p.listes[g.id] || {};
+    const show = checkbox('Tuile affichée', p.masques.indexOf(g.id) < 0);
+    const nom = textInput({ value: p.noms[g.id] || '', max: 40, placeholder: g.nom });
+    const seuil = g.autonomie ? numInput(p.seuils[g.id] || '', 1, 99) : null;
+    const sites = g.sites && g.sites.length ? textInput({ value: (l.sites || []).join(', '), max: 300, placeholder: g.sites.join(', ') }) : null;
+    const mods = g.modalites && g.modalites.length ? textInput({ value: (l.modalites || []).join(', '), max: 300, placeholder: g.modalites.join(', ') }) : null;
+    return { g, show, nom, seuil, sites, mods, node: h('div', { class: 'card col gap-s', 'data-dj': g.id }, h('b', null, g.nom), show,
+      field('Nom de la tuile pour les DJ', nom), seuil ? field('Supervisés nécessaires avant « ' + g.autonomie.bloque + ' »', seuil, 'Vide : même seuil que les internes (' + g.autonomie.seuil + ').') : null,
+      sites ? field('Sites proposés aux DJ', sites, 'Séparés par des virgules. Vide : mêmes sites que les internes.') : null,
+      mods ? field('Modalités proposées aux DJ', mods, 'Séparées par des virgules. Vide : mêmes modalités que les internes.') : null) };
+  });
+  return h('div', { class: 'card col' }, h('div', { class: 'h2' }, 'Profil DJ'),
+    h('p', { class: 'small muted' }, 'Les comptes au profil DJ (à choisir dans Admin → Comptes) ont les mêmes tuiles que les internes, sans le parcours « Premiers KTC / KTA ». Tu peux ici adapter ce que voient les DJ, sans rien changer pour les internes.'),
+    actif, rows.map(r => r.node),
+    h('button', { class: 'btn primary block', onclick: () => {
+      const v = { actif: actif.input.checked, masques: [], noms: {}, seuils: {}, listes: {} };
+      rows.forEach(r => {
+        const id = r.g.id;
+        if (!r.show.input.checked) v.masques.push(id);
+        if (r.nom.value.trim()) v.noms[id] = r.nom.value.trim();
+        if (r.seuil && r.seuil.value !== '' && Number(r.seuil.value) >= 1) v.seuils[id] = Math.min(99, Math.round(Number(r.seuil.value)));
+        const l = {};
+        if (r.sites && split(r.sites.value).length) l.sites = split(r.sites.value);
+        if (r.mods && split(r.mods.value).length) l.modalites = split(r.mods.value);
+        if (l.sites || l.modalites) v.listes[id] = l;
+      });
+      saveCfg('profilDJ', v); toast('Profil DJ enregistré.');
+    } }, 'Enregistrer le profil DJ'));
+}
 export function gestesAdmin() {
-  const list = clone(cfg('gestes'));
+  const list = clone(gestesRaw());
   return adminShell('Gestes', h('p', { class: 'small muted' }, 'L’ordre ci-dessous est celui des tuiles. Un geste désactivé n’est plus proposé mais ses données restent.'),
     h('div', { class: 'card list', style: { padding: '2px 14px' } }, list.map((g, i) => rowItem({ swatch: g.couleur, title: g.nom + (g.actif === false ? ' (désactivé)' : ''), sub: g.nomLong, onClick: () => openGesteEditor(g), right: moveBtns(list, i, a => saveCfg('gestes', a)) }))),
-    h('button', { class: 'btn primary block', onclick: () => openGesteEditor(null) }, icon('plus', 18), 'Nouveau geste'));
+    h('button', { class: 'btn primary block', onclick: () => openGesteEditor(null) }, icon('plus', 18), 'Nouveau geste'),
+    parcoursBlock(), djBlock());
 }
 
 /* ---------- DES d'origine (liste proposée aux internes) ---------- */
@@ -316,4 +373,4 @@ export function archivesAdmin() {
   return adminShell('Archives et exports', h('p', { class: 'small muted' }, 'Exporte les données d’un semestre. Les données sont conservées 5 ans, puis anonymisées automatiquement.'), field('Semestre', sel), out);
 }
 
-export const ADMIN_VIEWS = { app: appAdmin, modules: modulesAdmin, gestes: gestesAdmin, specialites: specialitesAdmin, radar: radarAdmin, meteo: meteoAdmin, badges: badgesAdmin, defis: defisAdmin, semestres: semestresAdmin, users: usersAdmin, trombi: trombiAdmin, echo: echoAdmin, securite: securiteAdmin, archives: archivesAdmin };
+export const ADMIN_VIEWS = { app: appAdmin, modules: modulesAdmin, gestes: gestesAdmin, specialites: specialitesAdmin, radar: radarAdmin, meteo: meteoAdmin, soutien: soutienAdmin, badges: badgesAdmin, defis: defisAdmin, semestres: semestresAdmin, users: usersAdmin, trombi: trombiAdmin, echo: echoAdmin, securite: securiteAdmin, archives: archivesAdmin };

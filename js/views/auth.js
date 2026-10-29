@@ -59,12 +59,19 @@ export function renderAuth(root, mode = 'login') {
     const rang = selectInput([{ v: '', label: 'Choisir…' }].concat(Array.from({ length: 12 }, (_, i) => ({ v: i + 1, label: 'Semestre ' + (i + 1) }))), '');
     const p1 = pwField('Mot de passe', { autocomplete: 'new-password', hint: pub.mdpMin + ' caractères minimum.' });
     const es = etabServiceField(pub.echo, {});
+    const kt = pub.parcours.actif !== false;
+    const ktc = textInput({ type: 'number', inputmode: 'numeric', min: '0', max: '999', placeholder: '0', name: 'ktcAvant' });
+    const kta = textInput({ type: 'number', inputmode: 'numeric', min: '0', max: '999', placeholder: '0', name: 'ktaAvant' });
     const acc = checkbox("J'ai lu la notice d'information ci-dessous et je l'accepte.", false);
     const err = errBox();
     const form = h('form', { class: 'col', novalidate: true },
       h('div', { class: 'row' }, h('div', { class: 'grow' }, field('Prénom', prenom)), h('div', { class: 'grow' }, field('Nom', nom))),
       field('E-mail', email, 'Sert uniquement à réinitialiser ton mot de passe.'),
-      field('DES d’origine', spec), field('Semestre de DES en cours', rang, 'Visibles de l’équipe pédagogique et des seniors.'), es.nodes, p1,
+      field('DES d’origine', spec), field('Semestre de DES en cours', rang, 'Visibles de l’équipe pédagogique et des seniors.'), es.nodes,
+      p1,
+      kt ? h('div', { class: 'card col' }, h('b', { class: 'small' }, 'Avant ce stage de réanimation'),
+        h('div', { class: 'row' }, h('div', { class: 'grow' }, field('KTC déjà posés', ktc, 'Cathéters veineux centraux. 0 si aucun.')), h('div', { class: 'grow' }, field('KTA déjà posés', kta, 'Cathéters artériels. 0 si aucun.'))),
+        h('p', { class: 'tiny muted' }, 'Sert à adapter ton parcours de début de stage. Visible de toi et de l’équipe pédagogique.')) : null,
       h('details', { class: 'card small' }, h('summary', { style: { fontWeight: 600, cursor: 'pointer' } }, "Notice d'information (données personnelles)"), h('p', { class: 'soft mt-s' }, pub.rgpd)),
       acc, err, submitBtn('Créer mon compte'));
     form.addEventListener('submit', async e => {
@@ -73,9 +80,12 @@ export function renderAuth(root, mode = 'login') {
       if (!rang.value) { showErr(err, 'Choisis ton semestre de DES.'); return; }
       if (es.active && !es.etab.value) { showErr(err, 'Choisis ton établissement.'); return; }
       if (es.active && !es.service.value) { showErr(err, 'Choisis ton service.'); return; }
+      const okN = v => /^\d{1,3}$/.test(String(v).trim());
+      if (kt && !okN(ktc.value)) { showErr(err, 'Indique combien de KTC tu as déjà posés avant ce stage (0 si aucun).'); return; }
+      if (kt && !okN(kta.value)) { showErr(err, 'Indique combien de KTA tu as déjà posés avant ce stage (0 si aucun).'); return; }
       if (!acc.input.checked) { showErr(err, "Coche la case pour accepter la notice d'information."); return; }
       const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
-      try { await register({ prenom: prenom.value, nom: nom.value, email: email.value, specialite: spec.value, rang: rang.value, etab: es.active ? es.etab.value : '', service: es.active ? es.service.value : '', password: p1.input.value, accept: true }); }
+      try { await register(Object.assign({ prenom: prenom.value, nom: nom.value, email: email.value, specialite: spec.value, rang: rang.value, etab: es.active ? es.etab.value : '', service: es.active ? es.service.value : '', password: p1.input.value, accept: true }, kt ? { ktcAvant: Number(ktc.value), ktaAvant: Number(kta.value) } : {})); }
       catch (ex) { showErr(err, ex instanceof NetError ? 'Connexion impossible : vérifie ta connexion Internet.' : ex.message); btn.disabled = false; }
     });
     return frame('Créer mon compte', 'Ton identifiant sera de la forme prenom.nom.', form, link('← Retour à la connexion', 'login'));

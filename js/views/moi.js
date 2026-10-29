@@ -1,13 +1,14 @@
 // Profil, météo, feedbacks reçus, réglages
 import { h, icon, clear, fmtDate, fmtDateLong, relDay, download, toCSV, dayKey, uid as newId, isoWeekKey } from '../util.js';
 import { S, put, cfg, get, userById, fullName, meNow, tutees, logout, changePw, deleteMyAccount, sync, pendingCount, isReadOnly, curSem, semInfo, ApiError, NetError } from '../store.js';
-import { meteoOf, meteoDef, flashOf, semesterWeeks, weekLabel, currentWeek, gestesOf, gesteName, gesteDetail, objectifsOf, statutNom, semFor } from '../logic.js';
+import { ktAvant, meteoOf, meteoDef, flashOf, semesterWeeks, weekLabel, currentWeek, gestesOf, gesteName, gesteDetail, objectifsOf, statutNom, semFor } from '../logic.js';
 import { openSheet, toast, field, textInput, textArea, choices, segmented, confirmSheet, empty, sectionHead, selectInput } from '../ui.js';
 import { getTheme, setTheme } from '../theme.js';
 import { meteoRow, openMeteoComment } from './gestes.js';
 import { pubInfo, appName } from '../nav.js';
 import { avatar, photoField, savePhoto } from '../photo.js';
 import { echoCard, toggleUnlock, unlockAvailable } from './echo-ui.js';
+import { soutienOn, openSoutien, soutienIfAlert } from './soutien.js';
 import { unlockEnabled } from '../unlock.js';
 import { etabServiceField } from './etab-service.js';
 import { echoCfg, etabServiceOn } from '../echo.js';
@@ -28,6 +29,7 @@ function openExtraMeteo() {
       if (!st.n) { toast('Choisis une météo.', { err: true }); return false; }
       put('meteo', { id: S.me.id + '_x_' + newId(), uid: S.me.id, sem: S.me.sem, semaine: currentWeek(), niveau: st.n, commentaire: t.value.trim(), extra: true, ts: Date.now() });
       toast('Météo ajoutée.');
+      soutienIfAlert(meteoDef(st.n));
     } }]
   });
 }
@@ -147,6 +149,7 @@ export function moiView() {
   frag.append(h('div', { class: 'card pad-l row', style: { gap: '14px' } }, avatar(me, 'lg'),
     h('div', { class: 'grow' }, h('b', { style: { fontSize: '17px' } }, fullName(me)), h('div', { class: 'small muted' }, roleLabel(me)),
       me.role === 'interne' && sem ? h('div', { class: 'small muted' }, sem.nom) : null,
+      me.role === 'interne' && (ktAvant(me, 'ktc') !== null || ktAvant(me, 'kta') !== null) ? h('div', { class: 'small muted' }, 'Avant ce stage : ' + [ktAvant(me, 'ktc') !== null ? ktAvant(me, 'ktc') + ' KTC' : null, ktAvant(me, 'kta') !== null ? ktAvant(me, 'kta') + ' KTA' : null].filter(Boolean).join(' · ') + ' posés (modifiable par l’équipe)') : null,
       me.role === 'interne' ? h('div', { class: 'small muted ic-inline' }, tut ? ['Tuteur :', avatar(tut, 'xs'), fullName(tut)] : 'Pas de tuteur désigné') : null)));
   if (me.role === 'interne') {
     if (cfg('modules').meteo) {
@@ -163,6 +166,7 @@ export function moiView() {
     h('div', { class: 'card list', style: { padding: '2px 14px' } },
       h('div', { class: 'item' }, icon('sun', 20), h('span', { class: 'tx' }, h('b', null, 'Apparence')), h('div', { style: { width: '210px' } }, th)),
       setting('user', 'Mon profil', 'Photo, nom, e-mail' + (me.role === 'interne' ? ', DES, semestre' : ''), openProfile),
+      soutienOn() ? setting('heart', 'Ressources de soutien', 'Psychologues, tuteur, cellule VSS', () => openSoutien()) : null,
       setting('key', 'Changer mon mot de passe', null, openChangePw),
       unlockAvailable() ? setting('lock', 'Déverrouillage par le téléphone', unlockEnabled(me.id) ? 'Activé : Face ID, empreinte ou code' : 'Désactivé', toggleUnlock) : null,
       setting('smartphone', 'Installer l’application', 'Écran d’accueil, mode hors ligne', openInstall),

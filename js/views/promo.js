@@ -2,7 +2,7 @@
 import { h, icon, clear, relDay, download, toCSV, dayKey, addDays, isoWeekKey, fmtDate, debounce } from '../util.js';
 import { S, all, cfg, users, interns, fullName, desLabel, userById, tutees, stats, put } from '../store.js';
 import { avatar } from '../photo.js';
-import { gesteDefs, gesteDef, countsByType, iotStats, breakdown, gesteName, gesteDetail, objectifsOf, meteoOf, meteoDef, currentWeek, weeklyMeteo, flashOf } from '../logic.js';
+import { effGestes, gesteDefs, gesteDef, countsByType, iotStats, breakdown, gesteName, gesteDetail, objectifsOf, meteoOf, meteoDef, currentWeek, weeklyMeteo, flashOf } from '../logic.js';
 import { empty, sectionHead, textInput, toast } from '../ui.js';
 import { barsChart } from '../charts.js';
 import { defisBlock } from './badges.js';
@@ -46,7 +46,7 @@ export function seniorPromoView() {
       const g = gm.get(u.id) || [];
       return h('a', { class: 'item', href: '#/promo/' + u.id, style: { textDecoration: 'none', color: 'inherit', alignItems: 'flex-start' } },
         avatar(u, 'sm'),
-        h('span', { class: 'tx' }, h('b', null, fullName(u)), h('span', null, [desLabel(u), 'total ' + g.length].filter(Boolean).join(' · ')), h('div', { style: { marginTop: '6px' } }, countChips(countsByType(g)))),
+        h('span', { class: 'tx' }, h('b', null, fullName(u)), h('span', null, [desLabel(u), 'total ' + g.length].filter(Boolean).join(' · ')), h('div', { style: { marginTop: '6px' } }, countChips(countsByType(effGestes(g))))),
         icon('chevron-right', 16));
     })) : empty('users', 'Aucun interne trouvé.'));
   };
@@ -59,7 +59,7 @@ export function seniorInternView(uid) {
   const u = userById(uid);
   if (!u || u.role !== 'interne') return empty('info', 'Interne introuvable.');
   const g = (gestesByUser().get(uid) || []);
-  const counts = countsByType(g);
+  const counts = countsByType(effGestes(g));
   const isTutee = u.tuteurId === S.me.id;
   const frag = h('div', { class: 'col', style: { gap: '16px' } });
   frag.append(h('a', { href: '#/promo', class: 'backlink' }, icon('chevron-left', 16), 'Promo'));
@@ -131,7 +131,7 @@ export function equipePromoView() {
   if (cfg('modules').defis) { const d = defisBlock(); if (d) frag.append(d); }
 
   // gestes par type + histogramme hebdomadaire
-  const counts = countsByType(allG);
+  const counts = countsByType([].concat(...Array.from(gm.values()).map(effGestes)));
   const max = Math.max(1, ...gesteDefs().map(d => counts[d.id] || 0));
   frag.append(h('div', { class: 'card col' }, h('div', { class: 'h2' }, 'Gestes de la promo'),
     gesteDefs().map(d => h('div', null, h('div', { class: 'row between small' }, h('span', null, d.nom), h('span', { class: 'mono' }, String(counts[d.id] || 0))), h('div', { class: 'bar', style: { '--c': d.couleur, marginTop: '4px' } }, h('i', { style: { width: ((counts[d.id] || 0) / max) * 100 + '%' } }))))));
@@ -147,7 +147,7 @@ export function exportPromoCSV() {
   const gm = gestesByUser();
   const head = ['Nom', 'Prénom', 'E-mail', 'DES d’origine', 'Semestre de DES', 'Tuteur'].concat(defs.map(d => d.nom), ['IOT réussies', 'IOT échecs', 'Objectifs acquis', 'Objectifs total']);
   const rows = interns().sort(byName).map(u => {
-    const g = gm.get(u.id) || [], c = countsByType(g), s = iotDef(g), o = objectifsOf(u.id), tut = u.tuteurId ? fullName(userById(u.tuteurId)) : '';
+    const g = gm.get(u.id) || [], c = countsByType(effGestes(g)), s = iotDef(g), o = objectifsOf(u.id), tut = u.tuteurId ? fullName(userById(u.tuteurId)) : '';
     return [u.nom, u.prenom, u.email || '', u.specialite || '', u.rang || '', tut].concat(defs.map(d => c[d.id] || 0), [s.ok, s.ko, o.filter(x => x.statut === 'acquis').length, o.length]);
   });
   download('promo-' + cfg('semestreCourant') + '.csv', toCSV([head].concat(rows)));

@@ -1,6 +1,6 @@
 // Point d'entrée : coque de l'application, routage par rôle, synchronisation, hooks (badges, connexions)
 import { h, clear, icon, dayKey } from './util.js';
-import { S, subscribe, restoreSession, sync, cfg, pendingCount, curSem, isReadOnly, put, tutees, fullName, needsProfile } from './store.js';
+import { S, subscribe, restoreSession, sync, cfg, pendingCount, curSem, isReadOnly, put, tutees, fullName, needsProfile, MIN_SERVER } from './store.js';
 import { fillAvatar } from './photo.js';
 import { setRerender, currentPath, go, appName, appLogo, savePubFromConfig } from './nav.js';
 import { applyTheme } from './theme.js';
@@ -82,6 +82,7 @@ function buildShell() {
       h('div', { class: 'brand' }, h('img', { src: appLogo(), alt: '' }), h('div', null, h('div', { class: 't' }, appName()), h('div', { class: 's' }, headerSub()))),
       fillAvatar(h('a', { class: 'avatar', href: '#/moi', 'aria-label': 'Mon profil' }), S.me)),
     h('div', { class: 'sync no-print', id: 'sync', role: 'status' }),
+    h('div', { class: 'srv-old no-print', id: 'srvOld', hidden: true }),
     h('main', { class: 'view', id: 'view' }),
     h('nav', { class: 'tabbar no-print', 'aria-label': 'Navigation' }, h('div', { class: 'tabbar-in' }, tabs.map(([p, l]) => h('a', { class: 'tab', href: '#' + p, 'aria-current': cur === p ? 'page' : null }, l)))));
   return shell;
@@ -138,7 +139,20 @@ function renderView(keepScroll) {
 setRerender(() => renderView(true));
 
 /* ---------- Bandeau de synchronisation ---------- */
+/** Serveur Apps Script trop ancien : les examens d'écho et les statuts EchoLearn y sont refusés */
+function renderServerOld() {
+  const el = document.getElementById('srvOld');
+  if (!el) return;
+  clear(el);
+  el.hidden = !S.serverOld;
+  if (!S.serverOld || !S.me) return;
+  const v = S.serverV ? 'version ' + S.serverV : 'version inconnue';
+  el.append(h('div', { class: 'banner bad', role: 'alert' }, icon('alert', 18), h('span', null, S.me.role === 'equipe'
+    ? 'Le serveur n’est pas à jour (' + v + ', attendue ' + MIN_SERVER + ' ou plus) : certaines fonctions ne sont pas enregistrées (examens d’écho, parcours des débutants en KT). Guide, partie 2.1 : colle Code.gs ET Defaults.gs dans Apps Script, puis Déployer → Gérer les déploiements → Nouvelle version.'
+    : 'Le serveur n’est pas à jour : certaines saisies (examens d’écho, KT) peuvent être refusées. Préviens l’équipe pédagogique.')));
+}
 function renderSync() {
+  renderServerOld();
   const el = document.getElementById('sync');
   if (!el) return;
   clear(el);

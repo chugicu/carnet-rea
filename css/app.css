@@ -98,6 +98,7 @@ h1, h2, h3, h4, p { margin: 0; }
 .sync.err .dot { background: var(--bad); }
 .sync.busy .dot { background: var(--sky); animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
+.srv-old { padding: 8px 16px 0; }
 .sync button { margin-left: auto; background: none; border: 0; color: var(--accent); font-weight: 600; font-size: 12px; padding: 4px 0; }
 
 /* ---------- Cartes & éléments ---------- */

@@ -480,7 +480,7 @@ export const DEFAULTS = {
   "textes": {
     "accueil": "",
     "gestes": "Ne saisis jamais de donnée patient (nom, IPP, date de naissance), même dans les commentaires.",
-    "rgpd": "Carnet Réa est un outil interne au service de réanimation. Il enregistre ton identité, ta spécialité, tes gestes, tes objectifs, tes évaluations d'entretien, ta météo hebdomadaire et les retours laissés par les seniors. Tes gestes, objectifs, évaluations et météo sont visibles par toi, ton tuteur et l'équipe pédagogique. Les seniors voient uniquement ton nombre de gestes. Tes badges restent privés. Les retours confidentiels des seniors ne sont visibles que de l'équipe pédagogique et de ton tuteur, jamais de toi. Aucune donnée patient n'est enregistrée. Les données sont archivées 5 ans puis effacées. Tu peux corriger tes données ou supprimer ton compte à tout moment : tes données personnelles sont alors effacées et tes gestes sont conservés de façon anonyme pour les statistiques du service."
+    "rgpd": "Carnet Réa est un outil interne au service de réanimation. Il enregistre ton identité, ta spécialité, le nombre de KTC et de KTA que tu as posés avant ce stage, tes gestes, tes objectifs, tes évaluations d'entretien, ta météo hebdomadaire et les retours laissés par les seniors. Tes gestes, objectifs, évaluations et météo sont visibles par toi, ton tuteur et l'équipe pédagogique. Les seniors voient uniquement ton nombre de gestes. Tes badges restent privés. Les retours confidentiels des seniors ne sont visibles que de l'équipe pédagogique et de ton tuteur, jamais de toi. Aucune donnée patient n'est enregistrée. Les données sont archivées 5 ans puis effacées. Tu peux corriger tes données ou supprimer ton compte à tout moment : tes données personnelles sont alors effacées et tes gestes sont conservés de façon anonyme pour les statistiques du service."
   },
   "securite": {
     "sessionJours": 14,
@@ -1062,5 +1062,67 @@ export const DEFAULTS = {
         ]
       }
     ]
+  },
+  "parcours": {
+    "actif": true,
+    "seuilAvant": 5,
+    "quatreMains": 2,
+    "supervises": 3,
+    "comptes": 5
+  },
+  "soutien": {
+    "actif": true,
+    "titre": "Tu n’es pas seul(e)",
+    "intro": "Merci d’avoir partagé ça. Une semaine difficile, ça arrive en réanimation, et tu n’as pas à la traverser tout(e) seul(e). Voici des personnes à qui tu peux t’adresser, quand tu le souhaites :",
+    "ressources": [
+      {
+        "nom": "Psychologues du travail",
+        "detail": "Mme Pierre Justin et Mme Nicolas, joignables par mail ou par téléphone.",
+        "tel": "1612 / 1613",
+        "email": "",
+        "url": "",
+        "urlLabel": ""
+      },
+      {
+        "nom": "Psychologue du service",
+        "detail": "Betty Adams, joignable par mail ou par téléphone.",
+        "tel": "1774",
+        "email": "",
+        "url": "",
+        "urlLabel": ""
+      },
+      {
+        "nom": "Psychologues de l’université",
+        "detail": "Un service de consultation existe aussi à l’université.",
+        "tel": "",
+        "email": "",
+        "url": "",
+        "urlLabel": ""
+      },
+      {
+        "nom": "Ton tuteur et l’équipe pédagogique",
+        "detail": "Ils restent à ta disposition pour en parler, sans jugement.",
+        "tel": "",
+        "email": "",
+        "url": "",
+        "urlLabel": ""
+      },
+      {
+        "nom": "Violences sexuelles et sexistes, discrimination",
+        "detail": "Tu peux faire un signalement via l’application Reapp (cellule VSS et discrimination).",
+        "tel": "",
+        "email": "",
+        "url": "https://reapp971.goodbarber.app/cellule-vss-discrimination",
+        "urlLabel": "Ouvrir Reapp"
+      }
+    ],
+    "outro": "Prends soin de toi. Ta météo reste visible de l’équipe pédagogique et de ton tuteur, qui peuvent te contacter."
+  },
+  "profilDJ": {
+    "actif": true,
+    "masques": [],
+    "noms": {},
+    "seuils": {},
+    "listes": {}
   }
 };

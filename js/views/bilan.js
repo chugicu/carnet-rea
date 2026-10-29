@@ -1,7 +1,7 @@
 // Bilan visuel (consultable à tout moment) + version imprimable / PDF de fin de stage
 import { h, icon, fmtDateFull, fmtDate, dayKey } from '../util.js';
 import { S, cfg, userById, fullName, semInfo } from '../store.js';
-import { gesteDefs, gestesOf, countsByType, breakdown, iotStats, autonomie, objectifsOf, entretienOf, ENTRETIENS, statutNom, radarCfg, meteoOf, meteoDef, semesterWeeks, weekLabel, badgeStatus, semFor } from '../logic.js';
+import { PREMIERS, effGestes, gesteDefs, gestesOf, countsByType, breakdown, iotStats, autonomie, objectifsOf, entretienOf, ENTRETIENS, statutNom, radarCfg, meteoOf, meteoDef, semesterWeeks, weekLabel, badgeStatus, semFor } from '../logic.js';
 import { radarChart, legend, C_AUTO } from '../charts.js';
 import { statDot } from './suivi.js';
 import { appName, appLogo } from '../nav.js';
@@ -19,7 +19,8 @@ export function bilanView(uid) {
   const sem = u.sem || semFor(uid);
   const si = semInfo(sem);
   const all = gestesOf(uid, sem);
-  const counts = countsByType(all);
+  const eff = effGestes(all);
+  const counts = countsByType(eff);
   const defs = gesteDefs();
   const objs = objectifsOf(uid, sem);
   const acq = objs.filter(o => o.statut === 'acquis').length;
@@ -53,9 +54,11 @@ export function bilanView(uid) {
     h('thead', null, h('tr', null, h('th', null, 'Geste'), h('th', { class: 'num' }, 'Total'), h('th', null, 'Détail'))),
     h('tbody', null, defs.map(d => {
       const parts = [];
-      breakdown(d, all).forEach(b => parts.push(b.items.filter(i => i.n).map(i => i.label + ' ' + i.n).join(', ')));
-      const a = d.autonomie ? autonomie(d, all) : null;
-      const det = parts.filter(Boolean).join(' · ') + (a ? (parts.some(Boolean) ? ' · ' : '') + (a.unlocked ? 'autonomie débloquée' : a.n + '/' + a.seuil + ' supervisés') : '');
+      breakdown(d, eff).forEach(b => parts.push(b.items.filter(i => i.n).map(i => i.label + ' ' + i.n).join(', ')));
+      const a = d.autonomie ? autonomie(d, eff) : null;
+      const pr = PREMIERS[d.id] ? all.filter(g => g.type === PREMIERS[d.id]) : [];
+      const prTxt = pr.length ? 'parcours débutant : ' + pr.filter(g => g.resultat === 'Réussi').length + ' réussi(s) sur ' + pr.length + ' saisie(s)' : '';
+      const det = parts.filter(Boolean).join(' · ') + (a ? (parts.some(Boolean) ? ' · ' : '') + (a.unlocked ? 'autonomie débloquée' : a.n + '/' + a.seuil + ' supervisés') : '') + (prTxt ? (a || parts.some(Boolean) ? ' · ' : '') + prTxt : '');
       return h('tr', null, h('td', null, h('b', { style: { color: d.couleur } }, '● '), d.nom), h('td', { class: 'num' }, String(counts[d.id] || 0)), h('td', { style: { whiteSpace: 'normal' }, class: 'small' }, det || '—'));
     })))));
 

@@ -2,7 +2,7 @@
 import { h, icon, clear, fmtDateFull } from '../util.js';
 import { S, put, cfg, userById, fullName, seniors, tutees, users, saveUser } from '../store.js';
 import { avatar } from '../photo.js';
-import { gesteDefs, gesteDef, gestesOf, countsByType, breakdown, iotStats, autonomie, objectifsOf, ENTRETIENS, flashOf, retoursOf, semFor, meteoOf } from '../logic.js';
+import { effGestes, premiersState, ktAvant, PREMIERS, gesteDefs, gesteDef, gestesOf, countsByType, breakdown, iotStats, autonomie, objectifsOf, ENTRETIENS, flashOf, retoursOf, semFor, meteoOf } from '../logic.js';
 import { empty, sectionHead, segmented, field, selectInput, toast } from '../ui.js';
 import { objectifItem, openObjectifEditor, entretienPanel, evolutionCard } from './suivi.js';
 import { gesteLine, openGesteSheet, pickGesteSheet } from './gestes.js';
@@ -39,15 +39,26 @@ export function dossierView(uid) {
   frag.append(seg, panel);
 
   function gestesTab() {
-    const all = gestesOf(uid, sem), counts = countsByType(all);
+    const all = gestesOf(uid, sem), eff = effGestes(all), counts = countsByType(eff);
     const box = h('div', { class: 'col', style: { gap: '14px' } });
+    // parcours débutant : nombre de KT posés avant le stage et avancement des tuiles « Premiers »
+    const tu = userById(uid);
+    Object.keys(PREMIERS).forEach(b => {
+      const d = gesteDef(b), pd = gesteDef(PREMIERS[b]), av = ktAvant(tu, b);
+      if (!d || !pd || av === null) return;
+      const p = premiersState(uid, b);
+      box.append(h('div', { class: 'card col', style: { gap: '4px' } },
+        h('div', { class: 'row between' }, h('b', null, d.nom + ' posés avant le stage : ' + av), h('span', { class: 'pill ' + (p.done ? 'good' : '') }, p.active ? 'Parcours Premiers en cours' : p.done ? 'Parcours Premiers terminé' : 'Hors parcours Premiers')),
+        p.eligible ? h('div', { class: 'small muted' }, 'Réussis à 4 mains ' + Math.min(p.q, p.pc.quatreMains) + '/' + p.pc.quatreMains + ' · supervisés réussis ' + Math.min(p.s, p.pc.supervises) + '/' + p.pc.supervises + ' · ' + p.entries + ' saisie' + (p.entries > 1 ? 's' : '') + ' (échecs compris)') : null,
+        isEq ? h('div', { class: 'tiny muted' }, 'Modifiable dans Admin → Comptes.') : null));
+    });
     box.append(h('div', { class: 'tiles' }, gesteDefs().map(d => h('div', { class: 'tile', style: { '--c': d.couleur } }, h('div', { class: 'top-r' }, h('span', { class: 'n' }, String(counts[d.id] || 0))), h('span', { class: 'nm' }, d.nom)))));
     gesteDefs().filter(d => d.autonomie || d.resultats).forEach(d => {
-      if (d.autonomie) { const a = autonomie(d, all); box.append(h('div', { class: 'card row between' }, h('span', null, d.nom + ' : supervisés ', h('b', { class: 'mono' }, a.n + '/' + a.seuil)), h('span', { class: 'pill ' + (a.unlocked ? 'good' : '') }, a.unlocked ? 'Autonomie débloquée' : 'En cours'))); }
+      if (d.autonomie) { const a = autonomie(d, eff); box.append(h('div', { class: 'card row between' }, h('span', null, d.nom + ' : supervisés ', h('b', { class: 'mono' }, a.n + '/' + a.seuil)), h('span', { class: 'pill ' + (a.unlocked ? 'good' : '') }, a.unlocked ? 'Autonomie débloquée' : 'En cours'))); }
       if (d.resultats) { const s = iotStats(all, d); box.append(h('div', { class: 'card row' }, ring(s.rate === null ? 0 : s.rate / 100, s.rate === null ? '—' : s.rate + '%', d.couleur, 56), h('div', null, h('b', null, d.nom + ' : taux de réussite'), h('div', { class: 'small muted' }, s.ok + ' réussies · ' + s.ko + ' échecs')))); }
     });
     if (isEq) box.append(h('button', { class: 'btn primary block', onclick: () => pickGesteSheet(uid) }, icon('plus', 18), 'Ajouter un geste pour cet interne'));
-    box.append(h('div', null, sectionHead('Historique'), all.length ? h('div', { class: 'card list', style: { padding: '2px 14px' } }, all.map(g => gesteLine(g, { onClick: isEq ? () => openGesteSheet({ def: gesteDef(g.type), row: g, uid }) : null }))) : empty('activity', 'Aucun geste.')));
+    box.append(h('div', null, sectionHead('Historique'), all.length ? h('div', { class: 'card list', style: { padding: '2px 14px' } }, all.map(g => gesteLine(g, { onClick: isEq ? () => openGesteSheet({ def: gesteDef(g.type, uid), row: g, uid }) : null }))) : empty('activity', 'Aucun geste.')));
     return box;
   }
   function objectifsTab() {

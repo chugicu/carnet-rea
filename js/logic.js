@@ -1,5 +1,5 @@
 // Règles métier : gestes, autonomie, badges, séries, radar, semaines
-import { all, cfg, get, curSem, semInfo } from './store.js';
+import { all, cfg, get, curSem, semInfo, PREMIERS, PREM_MODS, PREM_RES } from './store.js';
 import { addDays, dayKey, parseDay, isoWeekKey, weekKeyToMonday, fmtDate } from './util.js';
 
 export const ENTRETIENS = [
@@ -16,9 +16,33 @@ export const statutNom = id => (STATUTS.find(s => s.id === id) || STATUTS[0]).no
 
 /* ---------- Gestes ---------- */
 export function gesteDefs(withInactive) {
-  return (cfg('gestes') || []).filter(g => withInactive || g.actif !== false);
+  // les familles « Premiers KTC / KTA » (parcours débutant) n'apparaissent pas dans les listes ordinaires : voir tileDefs()
+  return (cfg('gestes') || []).filter(g => !g.premierDe && (withInactive || g.actif !== false));
 }
-export function gesteDef(id) { return (cfg('gestes') || []).find(g => g.id === id) || null; }
+/** Définition d'un geste ; avec « uid », telle que la voit cet utilisateur (profil DJ : noms, seuils, sites et modalités réglés par l'équipe) */
+export function gesteDef(id, uid) {
+  const d = (cfg('gestes') || []).find(g => g.id === id) || null;
+  return d && uid ? defFor(d, uid) : d;
+}
+export function profilDJ() {
+  return Object.assign({ actif: true, masques: [], noms: {}, seuils: {}, listes: {} }, cfg('profilDJ') || {});
+}
+export function isDJ(uid) { const u = get('users', uid); return !!u && u.role === 'interne' && u.profil === 'dj' && profilDJ().actif !== false; }
+/** Même règle que le serveur (applyProfil) */
+export function defFor(d, uid) {
+  if (!d || d.premierDe || !isDJ(uid)) return d;
+  const p = profilDJ(), l = p.listes[d.id] || {}, o = Object.assign({}, d);
+  if (p.noms[d.id]) o.nom = p.noms[d.id];
+  if (l.sites && l.sites.length && d.sites && d.sites.length) o.sites = l.sites;
+  if (l.modalites && l.modalites.length && d.modalites && d.modalites.length) o.modalites = l.modalites;
+  if (d.autonomie) {
+    const a = Object.assign({}, d.autonomie);
+    if (p.seuils[d.id]) a.seuil = p.seuils[d.id];
+    a.compte = a.compte.filter(m => (o.modalites || []).indexOf(m) >= 0);
+    o.autonomie = a;
+  }
+  return o;
+}
 export function gesteColor(id) { const g = gesteDef(id); return g ? g.couleur : '#9AA4B8'; }
 export function gesteName(g) {
   const d = gesteDef(g.type);
@@ -40,6 +64,52 @@ export function countsByType(gestes) {
   const m = {};
   gestes.forEach(g => (m[g.type] = (m[g.type] || 0) + 1));
   return m;
+}
+/* ---------- Parcours « Premiers KT » ---------- */
+export { PREMIERS };
+export function parcoursCfg() {
+  const c = Object.assign({ actif: true, seuilAvant: 5, quatreMains: 2, supervises: 3, comptes: 5 }, cfg('parcours') || {});
+  return c;
+}
+/** Nombre de KTC (base « ktc ») ou de KTA déclaré avant le stage ; null si non renseigné */
+export function ktAvant(u, base) {
+  const v = u && u[base === 'ktc' ? 'ktcAvant' : 'ktaAvant'];
+  return v === null || v === undefined || v === '' ? null : Number(v);
+}
+/** État du parcours débutant d'un interne pour « ktc » ou « kta » (même règle que le serveur) */
+export function premiersState(uid, base, exceptId) {
+  const pc = parcoursCfg();
+  const u = get('users', uid);
+  const sem = semFor(uid);
+  const rows = all('gestes').filter(g => g.uid === uid && g.sem === sem && g.type === PREMIERS[base] && g.id !== exceptId);
+  const ok = rows.filter(g => g.resultat === PREM_RES[0]);
+  const q = ok.filter(g => g.modalite === PREM_MODS[0]).length;
+  const s = ok.filter(g => g.modalite === PREM_MODS[1]).length;
+  const declared = ktAvant(u, base);
+  const eligible = !!u && u.role === 'interne' && pc.actif !== false && declared !== null && declared <= pc.seuilAvant;
+  const graduated = s >= pc.supervises;
+  return { pc, q, s, entries: rows.length, ok: Math.min(ok.length, pc.comptes), eligible, graduated, active: eligible && !graduated, done: eligible && graduated };
+}
+/** Tuiles proposées à un interne : « Premiers KTC / KTA » à la place de KTC / KTA tant que son parcours débutant est en cours */
+export function tileDefs(uid) {
+  const out = [];
+  const dj = isDJ(uid), masques = dj ? profilDJ().masques : [];
+  gesteDefs().forEach(d => {
+    if (masques.indexOf(d.id) >= 0) return;
+    if (PREMIERS[d.id] && premiersState(uid, d.id).active) { const p = gesteDef(PREMIERS[d.id]); out.push(p || d); } else out.push(defFor(d, uid));
+  });
+  return out;
+}
+/** Gestes « comptables » d'un interne : les premiers KT réussis du parcours débutant (au plus « comptes ») s'ajoutent à KTC / KTA */
+export function effGestes(gestes) {
+  const pc = parcoursCfg();
+  const rest = [], by = {};
+  gestes.forEach(g => {
+    const base = Object.keys(PREMIERS).find(b => PREMIERS[b] === g.type);
+    if (base) { if (g.resultat === PREM_RES[0]) (by[base] = by[base] || []).push(g); } else rest.push(g);
+  });
+  Object.keys(by).forEach(b => by[b].sort((x, y) => x.ts - y.ts).slice(0, pc.comptes).forEach(g => rest.push(Object.assign({}, g, { type: b }))));
+  return rest.sort((x, y) => y.ts - x.ts);
 }
 export function autonomie(def, gestes) {
   const a = def && def.autonomie;
@@ -164,7 +234,7 @@ export function lastEntretienWith(uid, field) {
 /* ---------- Badges ---------- */
 export function badgeData(uid) {
   return {
-    gestes: gestesOf(uid),
+    gestes: effGestes(gestesOf(uid)),
     objectifs: objectifsOf(uid),
     entretiens: ENTRETIENS.map(t => entretienOf(uid, t.id)).filter(Boolean),
     meteo: meteoOf(uid),

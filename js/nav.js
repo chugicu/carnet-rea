@@ -23,7 +23,8 @@ export function pubInfo() {
     rgpd: p.rgpd || DEFAULTS.textes.rgpd,
     inscription: p.inscription !== false,
     mdpMin: p.mdpMin || 8,
-    echo: Object.assign({ etabService: false, etabs: [], services: [] }, p.echo || {})
+    echo: Object.assign({ etabService: false, etabs: [], services: [] }, p.echo || {}),
+    parcours: Object.assign({ actif: true }, p.parcours || {})
   };
 }
 export async function refreshPub() {
@@ -36,8 +37,8 @@ export async function refreshPub() {
 export function savePubFromConfig() {
   if (!S.me) return;
   const cur = pubInfo();
-  const next = { app: cfg('app'), specialites: cfg('specialites'), rgpd: (cfg('textes') || {}).rgpd, inscription: (cfg('securite') || {}).inscriptionOuverte !== false, mdpMin: (cfg('securite') || {}).mdpMin || 8, echo: { etabService: !!(cfg('echo') || {}).etabService, etabs: (cfg('echo') || {}).etabs || [], services: (cfg('echo') || {}).services || [] } };
-  if (JSON.stringify(cur.app) !== JSON.stringify(next.app) || JSON.stringify(cur.specialites) !== JSON.stringify(next.specialites) || JSON.stringify(cur.echo) !== JSON.stringify(next.echo)) lsSet(K_PUB, JSON.stringify(next));
+  const next = { app: cfg('app'), specialites: cfg('specialites'), rgpd: (cfg('textes') || {}).rgpd, inscription: (cfg('securite') || {}).inscriptionOuverte !== false, mdpMin: (cfg('securite') || {}).mdpMin || 8, echo: { etabService: !!(cfg('echo') || {}).etabService, etabs: (cfg('echo') || {}).etabs || [], services: (cfg('echo') || {}).services || [] }, parcours: { actif: (cfg('parcours') || {}).actif !== false } };
+  if (JSON.stringify(cur.parcours) !== JSON.stringify(next.parcours) || JSON.stringify(cur.app) !== JSON.stringify(next.app) || JSON.stringify(cur.specialites) !== JSON.stringify(next.specialites) || JSON.stringify(cur.echo) !== JSON.stringify(next.echo)) lsSet(K_PUB, JSON.stringify(next));
 }
 export function appName() { return (S.me ? cfg('app') : pubInfo().app).nom || 'Carnet Réa'; }
 export function appLogo() { const l = (S.me ? cfg('app') : pubInfo().app).logo; return l || 'assets/logo-mark.png'; }

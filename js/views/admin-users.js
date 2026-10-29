@@ -1,5 +1,6 @@
 // Administration : comptes (création, rôles, tuteurs, réinitialisation, suppression)
 import { h, icon, clear, download, toCSV } from '../util.js';
+import { ktAvant } from '../logic.js';
 import { S, cfg, users, fullName, seniors, userById, saveUser, adminCall, profileComplete } from '../store.js';
 import { avatar, photoField, savePhoto } from '../photo.js';
 import { openSheet, toast, field, textInput, selectInput, checkbox, textArea, segmented, confirmSheet, empty, closeAllSheets } from '../ui.js';
@@ -86,8 +87,13 @@ function openUser(u) {
   const tut = selectInput([{ v: '', label: 'Aucun tuteur' }].concat(seniors().map(s => ({ v: s.id, label: fullName(s) }))), u.tuteurId || '');
   const actif = checkbox('Compte actif (décoche pour bloquer la connexion)', u.actif !== false);
   const es = etabServiceField({ etabService: etabServiceOn(), etabs: echoCfg().etabs, services: echoCfg().services }, u);
+  const ktOf = b => (ktAvant(u, b) === null ? '' : String(ktAvant(u, b)));
+  const ktc = textInput({ type: 'number', inputmode: 'numeric', min: '0', max: '999', value: ktOf('ktc'), placeholder: 'non renseigné' });
+  const kta = textInput({ type: 'number', inputmode: 'numeric', min: '0', max: '999', value: ktOf('kta'), placeholder: 'non renseigné' });
+  const profil = selectInput([{ v: '', label: 'Interne' }, { v: 'dj', label: 'DJ' }], u.profil || '');
   const extra = h('div', { class: 'col' });
-  const drawExtra = () => { clear(extra); if (role.value === 'interne') extra.append(field('DES d’origine', spec), field('Semestre de DES en cours', rang, 'Si tu vides un de ces champs, l’interne devra le renseigner à sa prochaine connexion.'), field('Tuteur', tut)); };
+  const drawExtra = () => { clear(extra); if (role.value === 'interne') extra.append(field('DES d’origine', spec), field('Semestre de DES en cours', rang, 'Si tu vides un de ces champs, l’interne devra le renseigner à sa prochaine connexion.'), field('Tuteur', tut), field('Profil', profil, 'Les réglages des DJ se font dans Admin → Gestes.'),
+    h('div', { class: 'card col' }, h('b', { class: 'small' }, 'KT posés avant le stage'), h('div', { class: 'row' }, h('div', { class: 'grow' }, field('KTC', ktc)), h('div', { class: 'grow' }, field('KTA', kta))), h('p', { class: 'tiny muted' }, 'Avec 5 KT ou moins (seuil réglable dans Admin → Gestes), l’interne suit le parcours « Premiers KTC / KTA ». Vide = tuiles habituelles.'))); };
   role.addEventListener('change', drawExtra);
   drawExtra();
   const self = u.id === S.me.id;
@@ -112,7 +118,9 @@ function openUser(u) {
     actions: [{ label: 'Enregistrer', kind: 'primary', onClick: () => {
       if (!prenom.value.trim() || !nom.value.trim()) { toast('Prénom et nom obligatoires.', { err: true }); return false; }
       const r = self ? u.role : role.value;
-      saveUser(u, { prenom: prenom.value.trim(), nom: nom.value.trim(), email: email.value.trim(), role: r, specialite: r === 'interne' ? spec.value : '', rang: r === 'interne' ? Number(rang.value) : 0, tuteurId: r === 'interne' ? tut.value : '', actif: self ? true : actif.input.checked, etab: es.active ? es.etab.value : u.etab, service: es.active ? es.service.value : u.service });
+      const ktv = el => { const t = el.value.trim(); return t === '' ? null : Number(t); };
+      if (r === 'interne') for (const el of [ktc, kta]) { const v = ktv(el); if (v !== null && !(Number.isInteger(v) && v >= 0 && v <= 999)) { toast('Nombre de KT invalide (0 à 999).', { err: true }); return false; } }
+      saveUser(u, { prenom: prenom.value.trim(), nom: nom.value.trim(), email: email.value.trim(), role: r, specialite: r === 'interne' ? spec.value : '', rang: r === 'interne' ? Number(rang.value) : 0, tuteurId: r === 'interne' ? tut.value : '', actif: self ? true : actif.input.checked, etab: es.active ? es.etab.value : u.etab, service: es.active ? es.service.value : u.service, ktcAvant: r === 'interne' ? ktv(ktc) : null, ktaAvant: r === 'interne' ? ktv(kta) : null, profil: r === 'interne' ? profil.value : '' });
       savePhoto(u, photo);
       toast('Enregistré.');
     } }]
@@ -130,7 +138,7 @@ export function usersAdmin() {
     box.append(l.length ? h('div', { class: 'card list', style: { padding: '2px 14px' } }, l.map(u => h('button', { class: 'item', onclick: () => openUser(u) },
       avatar(u, 'sm'),
       h('span', { class: 'tx' }, h('b', null, fullName(u)), h('span', null, roleLabel(u) + (u.role === 'interne' && u.sem && u.sem !== cfg('semestreCourant') ? ' · archive ' + u.sem : '') + (u.email ? ' · ' + u.email : ''))),
-      u.actif === false ? h('span', { class: 'pill warn' }, 'désactivé') : null, u.role === 'interne' && !u.anon && !profileComplete(u) ? h('span', { class: 'pill warn' }, 'profil à compléter') : null, u.mustChange ? h('span', { class: 'pill' }, 'jamais connecté') : null, icon('chevron-right', 16)))) : empty('users', 'Aucun compte.'));
+      u.profil === 'dj' && u.role === 'interne' ? h('span', { class: 'pill' }, 'DJ') : null, u.actif === false ? h('span', { class: 'pill warn' }, 'désactivé') : null, u.role === 'interne' && !u.anon && !profileComplete(u) ? h('span', { class: 'pill warn' }, 'profil à compléter') : null, u.mustChange ? h('span', { class: 'pill' }, 'jamais connecté') : null, icon('chevron-right', 16)))) : empty('users', 'Aucun compte.'));
   };
   const search = textInput({ type: 'search', placeholder: 'Rechercher…', value: q });
   search.addEventListener('input', () => { q = qMem = search.value; draw(); });

@@ -24,7 +24,8 @@ export function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ig
 export const S = {
   session: null, me: null, db: null,
   online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-  syncing: false, lastSync: 0, error: '', mustChange: false, notice: '', storageFull: false
+  syncing: false, lastSync: 0, error: '', mustChange: false, notice: '', storageFull: false,
+  serverOld: undefined, serverV: '' // version du serveur : voir checkServer
 };
 const listeners = new Set();
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
@@ -81,7 +82,7 @@ export function cfg(key) {
   }
   const v = cfgCache[key];
   const d = DEFAULTS[key];
-  if (key === 'gestes') return withEcho(v === undefined ? d : v);
+  if (key === 'gestes') return withPremiers(withEcho(v === undefined ? d : v));
   if (v === undefined) return d;
   if (v && d && typeof v === 'object' && typeof d === 'object' && !Array.isArray(v) && !Array.isArray(d)) return Object.assign({}, d, v);
   return v;
@@ -91,6 +92,21 @@ function withEcho(list) {
   if (!Array.isArray(list) || list.some(g => g.id === 'echo')) return list;
   return list.concat((DEFAULTS.gestes || []).filter(g => g.id === 'echo'));
 }
+/* ---------- Parcours « Premiers KT » : familles dérivées de KTC / KTA (mêmes sites), jamais enregistrées dans la configuration ---------- */
+export const PREMIERS = { ktc: 'ktc1', kta: 'kta1' };
+export const PREM_MODS = ['À 4 mains', 'Supervisé'];
+export const PREM_RES = ['Réussi', 'Échec'];
+function withPremiers(list) {
+  if (!Array.isArray(list)) return list;
+  const out = list.filter(g => !g.premierDe);
+  Object.keys(PREMIERS).forEach(b => {
+    const base = out.find(g => g.id === b);
+    if (base) out.push({ id: PREMIERS[b], nom: 'Premiers ' + base.nom, nomLong: 'Parcours débutant : à 4 mains, puis supervisé', couleur: base.couleur, actif: true, sites: base.sites || [], modalites: PREM_MODS, resultats: PREM_RES, premierDe: b });
+  });
+  return out;
+}
+/** Catalogue modifiable par l'équipe : sans les familles dérivées */
+export function gestesRaw() { return (cfg('gestes') || []).filter(g => !g.premierDe); }
 export function pendingCount() { return S.db ? S.db.ops.length : 0; }
 export function isPending(tbl, id) { return !!S.db && S.db.ops.some(o => o.tbl === tbl && o.row.id === id); }
 export function stats() { return S.db ? S.db.stats : null; }
@@ -134,7 +150,7 @@ export function del(tbl, id) {
 export function saveCfg(key, valeur) { return put('config', { id: key, valeur: clone(valeur) }); }
 /** Enregistre un compte en renvoyant tous les champs (le serveur remplace ce qui n'est pas fourni) */
 export function saveUser(u, patch) {
-  return put('users', Object.assign({ id: u.id, nom: u.nom, prenom: u.prenom, email: u.email || '', role: u.role, specialite: u.specialite || '', rang: u.rang || 0, actif: u.actif !== false, tuteurId: u.tuteurId || '', etab: u.etab, service: u.service }, patch));
+  return put('users', Object.assign({ id: u.id, nom: u.nom, prenom: u.prenom, email: u.email || '', role: u.role, specialite: u.specialite || '', rang: u.rang || 0, actif: u.actif !== false, tuteurId: u.tuteurId || '', etab: u.etab, service: u.service, profil: u.profil || '' }, patch));
 }
 
 /* ---------- Profil (DES d'origine, semestre de DES, photo) ---------- */
@@ -160,6 +176,26 @@ export async function api(req, timeout = 30000) {
     throw new NetError('Pas de connexion au serveur.');
   } finally { clearTimeout(timer); }
   try { return JSON.parse(txt); } catch (e) { throw new NetError('Réponse inattendue du serveur.'); }
+}
+/* ---------- Version du serveur : un serveur Apps Script pas à jour refuse sans bruit les examens d'écho et les statuts EchoLearn ---------- */
+export const MIN_SERVER = '1.4.0';
+const vparts = v => String(v || '').split('.').map(n => parseInt(n, 10) || 0);
+export function versionLt(a, b) {
+  const x = vparts(a), y = vparts(b);
+  for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); }
+  return false;
+}
+let srvAt = 0;
+/** Interroge le serveur (« ping ») : S.serverOld vaut vrai si sa version est inférieure à MIN_SERVER ou illisible. Hors ligne, on ne conclut rien. */
+export async function checkServer(force) {
+  if (!S.session) return;
+  if (!force && Date.now() - srvAt < 60000) return;
+  srvAt = Date.now();
+  let r = null;
+  try { r = await api({ a: 'ping' }, 12000); } catch (e) { return; }
+  const v = r && r.ok && r.v ? String(r.v) : '';
+  const old = !v || versionLt(v, MIN_SERVER);
+  if (old !== S.serverOld || v !== S.serverV) { S.serverOld = old; S.serverV = v; emit('status'); }
 }
 function authLost(msg) {
   const uid = S.me && S.me.id;
@@ -326,6 +362,7 @@ async function doSync(opts) {
       touchAll();
       persistSoon();
       S.lastSync = Date.now(); S.online = true; S.error = '';
+      if (S.serverOld === undefined || S.serverOld) checkServer();
       if (changed) emit('data');
       if (!db.ops.length && !db.forceFull) break;
     }
